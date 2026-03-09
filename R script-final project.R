@@ -1,6 +1,7 @@
-#------------------------
-#---REQUIRED LIBRARIES---
-#------------------------
+#--------------------------------
+# REQUIRED LIBRARIES
+#--------------------------------
+
 library(ggplot2)
 library(patchwork)
 library(ggpubr)
@@ -16,16 +17,15 @@ library(tidyr)
 library(tibble)
 library(forecast)
 library(randomForest)
-#--------------------
-#---DATA INGESTION---
-#--------------------
+library(Metrics)
 
-getwd()
-setwd('C:\\Users\\smjut\\OneDrive\\Documents\\UCI\\DATA210P\\final project')
+#--------------------------------
+# DATA INGESTION + INSPECTION
+#--------------------------------
 
 energy_df_w_time<- read.csv('energydata_complete.csv')
 
-#high level overview
+# High level overview
 head(energy_df_w_time)
 cat('Column names:',paste(colnames(energy_df_w_time)))
 cat('Data dimensions:',paste(dim(energy_df_w_time)))
@@ -33,7 +33,7 @@ print('Feature information:')
 str(energy_df_w_time)
 cat('Missing values:',paste(sum(is.na(energy_df_w_time))))
 
-#Transforming date data
+# Transforming date data
 energy_df_w_time <- energy_df_w_time %>%
   mutate(
     # Convert to datetime
@@ -61,16 +61,22 @@ energy_df_w_time <- energy_df_w_time %>%
     is_weekend = factor(is_weekend)
   )
 
-#Dropping columns not of interest
+# Dropping columns not of interest
 cols_to_drop <- c("date", "rv1","rv2")
 energy_df <- energy_df_w_time[, !names(energy_df_w_time) %in% cols_to_drop]
 str(energy_df)
-#-------------------------------
-#---EXPLORATORY DATA ANALYSIS---
-#-------------------------------
 
-##Uni variate analysis
+
+#--------------------------------
+# EXPLORATORY DATA ANALYSIS
+#--------------------------------
+
+#--------------------------------
+# Univariate Analysis
+#--------------------------------
+
 #Bar chart for integer vars
+
 p1<- ggplot(energy_df,aes(x=Appliances))+geom_bar(color="#0D0533",fill="#C4C3FA") +
   labs(title="Distribution of Energy Use by Appliances(Wh)",
        x="Energy use by Appliances", y="Count") + theme_minimal()
@@ -90,7 +96,7 @@ p5 <- ggplot(energy_df,aes(x=is_weekend))+geom_bar(color="#0D0533",fill="#C4C3FA
 p1+p2+p3+p4+p5
 
 
-#Checking for zero inflation based on plots
+# Checking for zero inflation based on plots
 mean(energy_df$lights == 0)
 mean(energy_df$Appliances == 0)
 
@@ -99,7 +105,7 @@ energy_df %>%
   count(lights) %>% 
   arrange(desc(n))
 
-#Creating light categories
+# Creating light categories
 energy_df <- energy_df %>%
   mutate(
     lights_cat = case_when(
@@ -111,10 +117,10 @@ energy_df <- energy_df %>%
   )
 
 
-#Log transforming Appliances to deal w/ skewness
+# Log transforming Appliances to deal w/ skewness
 energy_df$lAppliances<-log(energy_df$Appliances)
 
-#Checking new dist for lights cat and lAppliances
+# Checking new dist for lights cat and lAppliances
 log_app<-ggplot(energy_df,aes(x=lAppliances))+geom_histogram(color='#0D0533',fill='#C4C3FA') +
   labs(title="Distribution of Log Energy Use by Appliances(log Wh)",
        x="Log Energy Use by Appliances(log Wh)", y="Frequency")+theme_minimal()
@@ -124,8 +130,8 @@ lights_cat <- ggplot(energy_df,aes(x=lights_cat))+geom_bar(color="#0D0533",fill=
 
 log_app+lights_cat
 
-#Hist for continuous data
-#Humidity data
+# Hist for continuous data
+# Humidity data
 h1<-ggplot(energy_df,aes(x=RH_1))+geom_histogram(color='#0D0533',fill='#C4C3FA') +
   labs(title="Distribution of Humidity in \nKitchen Area(%)",
        x="Humidity(%)", y="Frequency")+theme_minimal()
@@ -157,12 +163,13 @@ h9<-ggplot(energy_df,aes(x=RH_9))+geom_histogram(color='#0D0533',fill='#C4C3FA')
 
 h1+h2+h3+h4+h5+h6+h7+h8+h9
 
+# Validity check on RH_6 (Humidity should not be 0)
 mean(energy_df$RH_6 == 0)
 mean(energy_df$RH_6 <= 1)
 mean(energy_df$RH_6 <= 5)
 
 
-#Temperature data
+# Temperature data
 
 t1<-ggplot(energy_df,aes(x=T1))+geom_histogram(color='#0D0533',fill='#C4C3FA') +
   labs(title="Distribution of Temperature in \nKitchen Area(Celcius)",
@@ -194,7 +201,7 @@ t9<-ggplot(energy_df,aes(x=T9))+geom_histogram(color='#0D0533',fill='#C4C3FA') +
 
 t1+t2+t3+t4+t5+t6+t7+t8+t9
 
-#Chievers data
+# Chievers data
 c1<-ggplot(energy_df,aes(x=RH_out))+geom_histogram(color='#0D0533',fill='#C4C3FA') +
   labs(title="Distribution of Humidity Outside \n(from Chievres weather station)(%)",
        x="Humidity(%)", y="Frequency")+theme_minimal()
@@ -220,7 +227,10 @@ c1+c2+c3+c4+c5+c6
 cols_to_drop <- c("RH_6", "T6")
 energy_df <- energy_df[, !names(energy_df) %in% cols_to_drop]
 
-#Correlation analysis 
+#--------------------------------
+# Correlation Analysis
+#--------------------------------
+
 # Compute the correlation matrix
 
 energy_df$is_weekend_num <- as.integer(energy_df$is_weekend == "Weekend")
@@ -233,6 +243,7 @@ numeric_df$day_num <- NULL
 cor_matrix <- cor(numeric_df, use = "complete.obs")
 
 #Visualize correlations
+
 corrplot(cor_matrix, 
          method = "color",           
          type = "upper", 
@@ -248,6 +259,7 @@ corrplot(cor_matrix,
          mar = c(0,0,2,0))
 
 #Identify highly correlated variables
+
 cor_df <- as.data.frame(as.table(cor_matrix))
 
 strong_corr <- cor_df %>%
@@ -283,7 +295,11 @@ lapp_cor_top <- cor_df %>%
 
 lapp_cor_top
 
-##Bivariate analysis for strongest numerical predictors
+#--------------------------------
+# Bivariate analysis for strongest numerical predictors
+#--------------------------------
+
+
 cor1<- ggplot(energy_df, aes(x = hour_val, y = lAppliances)) +
   geom_point(color='#C4C3FA') +
   geom_smooth(method = "loess", se = FALSE, color='#0D0533') + 
@@ -307,10 +323,12 @@ cor4<- ggplot(energy_df, aes(x = T_out, y = lAppliances)) +
 
 cor1+cor2+cor3+cor4
 
+#--------------------------------
+# Hierarchical clustering of sensor variables
+#--------------------------------
 
-##Hierarchical clustering of sensor variables
 sensor_vars <- energy_df %>%
-  select(starts_with("T"), starts_with("RH")) %>%
+  dplyr::select(starts_with("T"), starts_with("RH")) %>%
   scale()
 
 cor_mat <- cor(sensor_vars)
@@ -320,10 +338,11 @@ hc <- hclust(dist_mat, method = "complete")
 plot(hc, main = "Sensor Correlation Clusters",
      sub = "Method: Complete Linkage",
      xlab = "Distance Metric: 1 - |Correlation|")
-help(plot)
 
+#--------------------------------
+# PCA to explore potential dim reduction
+#--------------------------------
 
-##PCA to explore potential dim reduction
 pca <- prcomp(sensor_vars, center = TRUE, scale. = TRUE)
 
 summary(pca)
@@ -346,9 +365,12 @@ ggplot(pc_df, aes(PC1, PC2)) +
   labs(title = "PCA Projection of Sensor Variables") +
   theme_minimal()
 
-##Correlation w/ categorical vars
+#--------------------------------
+# Correlation w/ categorical vars
+#--------------------------------
+
 #Checking assumptions for ANOVA
-# Normality (visual)
+# Normality 
 qqnorm(residuals(aov(lAppliances ~ lights_cat, data = energy_df)), main ='Nomral Q-Q plot: Lights_cat')
 qqline(residuals(aov(lAppliances ~ lights_cat, data = energy_df)))
 
@@ -361,6 +383,7 @@ car::leveneTest(lAppliances ~ day_name, data = energy_df)
 
 
 #Homogeneity violated --> Welch's ANOVA
+
 oneway.test(lAppliances ~ lights_cat, data = energy_df)
 oneway.test(lAppliances ~ day_name, data = energy_df)
 
@@ -379,7 +402,10 @@ ggplot(energy_df, aes(x = lights_cat, y = lAppliances)) +
   labs(title="Log Energy Use by Appliances vs. Light Usage Energy Category",
        x="Light Usage Energy Category", y="Log Energy Use by Appliances(log Wh)")+theme_minimal()
 
-##Time series analysis 
+#--------------------------------
+# Time series analysis 
+#--------------------------------
+
 #Average energy use over time period
 daily<-energy_df%>%
   mutate(dt_only = as.Date(dt))%>%
@@ -404,16 +430,19 @@ monthly<-energy_df%>%
 daily/monthly
 
 #ACF to look at correlation between observations and their lags
-acf(energy_df$lAppliances, lag.max = 60, main='ACF of lAppliances vs Lag')
+acf(energy_df$lAppliances, lag.max = 60, main = "Autocorrelation Function for lAppliances")
 
 
 #PACF to determine which lags matter
 energy_df <- energy_df %>% arrange(dt)
 pacf(energy_df$lAppliances,
      lag.max = 60,
-     main = "PACF of lAppliances")
+     main = "Partial Autocorrelation Function for lAppliances")
 
-##Outlier analysis
+#--------------------------------
+# Outlier analysis 
+#--------------------------------
+
 #Identify outliers using IQR
 Q1<- quantile(energy_df$Appliances,0.25)
 Q3<- quantile(energy_df$Appliances,0.75)
@@ -479,7 +508,6 @@ comparison <- energy_df %>%
 
 print(comparison,width=Inf)
 
-
 #Visualizing outliers over time
 energy_df %>%
   mutate(
@@ -494,43 +522,53 @@ energy_df %>%
        color = "Is Outlier") +
   theme_minimal()
 
-#--------------
-#---MODELING---
-#--------------
+#--------------------------------
+# MODELING
+#--------------------------------
 
-#----AUTOREGRESSION----
+#--------------------------------
+#  Data Preparation
+#--------------------------------
+# Ensure observations are ordered by time before any time-series modeling.
 
-#Order by time
 energy_df <- energy_df %>% arrange(dt)
 
-# Stationarity check (for AR/ARX models)
+#--------------------------------
+# Stationarity Assessment
+#--------------------------------
+# Check whether differencing is required before fitting AR/ARMA models.
+
 adf.test(energy_df$lAppliances)
 
-#Create lag1...lag10 of the response
-energy_df$lag1<- dplyr::lag(energy_df$lAppliances,1)
-energy_df$lag2 <- dplyr::lag(energy_df$lAppliances,2)
-energy_df$lag3<- dplyr::lag(energy_df$lAppliances,3)
-energy_df$lag4<- dplyr::lag(energy_df$lAppliances,4)
-energy_df$lag5<- dplyr::lag(energy_df$lAppliances,5)
-energy_df$lag6<- dplyr::lag(energy_df$lAppliances,6)
-energy_df$lag7<- dplyr::lag(energy_df$lAppliances,7)
-energy_df$lag8<- dplyr::lag(energy_df$lAppliances,8)
-energy_df$lag9<- dplyr::lag(energy_df$lAppliances,9)
-energy_df$lag10<- dplyr::lag(energy_df$lAppliances,10)
+# The ADF test strongly rejected the null hypothesis of a unit root,
+# indicating the series is stationary. Differencing is not required
 
-#drop nas
-energy_df <- energy_df %>% tidyr::drop_na(lag1,lag2,lag3,lag4,lag5,lag6,lag7,lag8,lag9,lag10)
+#--------------------------------
+# Feature Engineering: Lagged Variables
+#--------------------------------
+# Create lag1–lag10 for autoregressive modeling.
 
-# Build rolling-origin splits 
+for(i in 1:10){
+  energy_df[[paste0("lag",i)]] <- dplyr::lag(energy_df$lAppliances, i)
+}
+
+# Remove rows with NA values created by lagging
+energy_df <- energy_df %>% drop_na(starts_with("lag"))
+
+#--------------------------------
+# Rolling-Origin Cross Validation
+#--------------------------------
+# Time-series models cannot use random CV due to temporal ordering.
+# Rolling-origin CV preserves structure.
+
 set.seed(123)
-energy_df <- energy_df %>% arrange(dt)
+
 n <- nrow(energy_df)
-folds<- 11
+folds <- 11
 
-assess  <- floor(n / (folds+1))        
-initial <- n - folds * assess      # Number of folds = (n- initial)/skip
-skip    <- assess               # move forward by one test block each fold
-
+assess  <- floor(n/(folds+1))
+initial <- n - folds*assess
+skip    <- assess
 
 cv_splits <- rolling_origin(
   energy_df,
@@ -540,205 +578,386 @@ cv_splits <- rolling_origin(
   cumulative = TRUE
 )
 
-length(cv_splits$splits) #confirming 10 folds created
+length(cv_splits$splits)
 
-#CV for AR(p)
-rmse <- function(y, yhat) sqrt(mean((y - yhat)^2, na.rm = TRUE))
+#--------------------------------
+# RMSE function
+#--------------------------------
+rmse <- function(y, yhat){
+  sqrt(mean((y-yhat)^2, na.rm=TRUE))
+}
 
-cv_rmse_ar_p <- function(p, splits_obj) {
-  # Build formula: lAppliances ~ lag1 + ... + lagp
-  lag_terms <- paste0("lag", 1:p, collapse = " + ")
-  fml <- as.formula(paste("lAppliances ~", lag_terms))
+#--------------------------------
+# Baseline Model: Autoregression
+#--------------------------------
+# Evaluate AR(p) models for p = 1…10 using rolling CV. (10 chosen based on PACF plot)
+
+cv_rmse_ar_p <- function(p, splits){
   
-  # Rolling CV RMSE values
-  map_dbl(splits_obj$splits, function(s) {
+  lag_terms <- paste0("lag",1:p,collapse=" + ")
+  fml <- as.formula(paste("lAppliances ~",lag_terms))
+  
+  map_dbl(splits$splits,function(s){
+    
     train <- analysis(s)
     test  <- assessment(s)
     
-    mod <- lm(fml, data = train)
-    pred <- predict(mod, newdata = test)
+    mod <- lm(fml,data=train)
+    pred <- predict(mod,newdata=test)
     
-    rmse(test$lAppliances, pred)
+    rmse(test$lAppliances,pred)
+    
   })
 }
 
-#run ar(1) ...ar(10) and summarize results
-ar_results <- map_dfr(1:10, function(p) {
-  rmse_vals <- cv_rmse_ar_p(p, cv_splits)
+ar_results <- map_dfr(1:10,function(p){
+  
+  rmse_vals <- cv_rmse_ar_p(p,cv_splits)
   
   tibble(
-    p = p,
-    mean_rmse = mean(rmse_vals),
-    sd_rmse   = sd(rmse_vals)
+    p=p,
+    mean_rmse=mean(rmse_vals),
+    sd_rmse=sd(rmse_vals)
   )
+  
 })
 
 ar_results
 
-#Plot CV rmse and sd
-ggplot(ar_results, aes(x = p, y = mean_rmse)) +
-  geom_line() +
-  geom_point() +
-  geom_errorbar(aes(ymin = mean_rmse - sd_rmse, ymax = mean_rmse + sd_rmse), width = 0.2) +
+# Plot RMSE vs AR order
+
+ggplot(ar_results,aes(p,mean_rmse))+
+  geom_line()+
+  geom_point()+
+  geom_errorbar(aes(
+    ymin=mean_rmse-sd_rmse,
+    ymax=mean_rmse+sd_rmse
+  ),width=.2)+
   labs(
-    title = "Rolling-Origin CV RMSE for AR(p) Models",
-    x = "AR order p",
-    y = "Mean CV RMSE (± 1 SD)"
-  ) +
+    title="Rolling-Origin CV RMSE for AR(p)",
+    x="AR Order",
+    y="Mean RMSE (±1 SD)"
+  )+
   theme_minimal()
 
-#summary of 'best' AR model
+#--------------------------------
+# Selected Baseline: AR(1)
+#--------------------------------
+
 fml_ar1 <- lAppliances ~ lag1
 
-rmse_ar1 <- map_dbl(cv_splits$splits, function(s) {
+rmse_ar1 <- map_dbl(cv_splits$splits,function(s){
+  
   train <- analysis(s)
   test  <- assessment(s)
   
-  mod <- lm(fml_ar1, data = train)
-  pred <- predict(mod, newdata = test)
-  rmse(test$lAppliances, pred)
+  mod <- lm(fml_ar1,data=train)
+  pred <- predict(mod,newdata=test)
+  
+  rmse(test$lAppliances,pred)
+  
 })
 
 mean(rmse_ar1); sd(rmse_ar1)
 
-# Fit AR(1) on full data for diagnostics
-mod_ar1 <- lm(fml_ar1, data = energy_df)
-summary(mod_ar1)
-acf(residuals(mod_ar1), lag.max = 50, main = "ACF of residuals vs Lag (AR(1))")
-Box.test(residuals(mod_ar1), lag = 20, type = "Ljung-Box")
+# Diagnostics on full sample
 
+fit_ar1 <- lm(fml_ar1,data=energy_df)
 
+acf(residuals(mod_ar1),lag.max=50)
+Box.test(residuals(mod_ar1),lag=20,type="Ljung-Box")
 
-#---TIME SERIES REGRESSION ---
+#--------------------------------
+# Time Series Regression (TSRF)
+#--------------------------------
+# Incorporate environmental predictors identified during EDA.
 
-#Baseline MLR w/ top predictors from EDA + lag1
 fml_arx_sat <- lAppliances ~ lag1 + hour_sin + hour_cos + RH_out + T2 + T_out + lights_cat
 
-rmse_arx_sat <- map_dbl(cv_splits$splits, function(s) {
+rmse_arx_sat <- map_dbl(cv_splits$splits,function(s){
+  
   train <- analysis(s)
   test  <- assessment(s)
   
-  mod <- lm(fml_arx_sat, data = train)
-  pred <- predict(mod, newdata = test)
-  rmse(test$lAppliances, pred)
+  mod <- lm(fml_arx_sat,data=train)
+  pred <- predict(mod,newdata=test)
+  
+  rmse(test$lAppliances,pred)
+  
 })
 
 mean(rmse_arx_sat); sd(rmse_arx_sat)
 
-# Fit saturated ARX on full data for summary/VIF
-model_arx_sat <- lm(fml_arx_sat, data = energy_df)
-summary(model_arx_sat)
+# Fit full model on entire dataset
 
-vif_vals_sat <- car::vif(model_arx_sat)
-print("VIF Values (ARX saturated):")
-print(vif_vals_sat)
+fit_arx_sat <- lm(fml_arx_sat,data=energy_df)
 
-#AIC selected time series regression
-model_arx_aic <- step(model_arx_sat, direction = "both", k = 2, trace = 0)
-cat("\n=== Stepwise AIC selected model ===\n")
-print(formula(model_arx_aic))
-summary(model_arx_aic)
+summary(fit_arx_sat)
+car::vif(fit_arx_sat)
 
-# CV RMSE for the AIC-selected formula
+#--------------------------------
+# AIC Model Selection
+#--------------------------------
+
+model_arx_aic <- step(model_arx_sat,direction="both",trace=0)
+
 fml_arx_aic <- formula(model_arx_aic)
 
-rmse_arx_aic <- map_dbl(cv_splits$splits, function(s) {
+rmse_arx_aic <- map_dbl(cv_splits$splits,function(s){
+  
   train <- analysis(s)
   test  <- assessment(s)
   
-  mod <- lm(fml_arx_aic, data = train)
-  pred <- predict(mod, newdata = test)
-  rmse(test$lAppliances, pred)
+  mod <- lm(fml_arx_aic,data=train)
+  pred <- predict(mod,newdata=test)
+  
+  rmse(test$lAppliances,pred)
+  
 })
 
 mean(rmse_arx_aic); sd(rmse_arx_aic)
 
-#---TIME SERIES RANDOM FOREST---
-#Find best params
-grid <- expand.grid(
-  mtry = c(2, 3, 4),
-  nodesize = c(1, 10)
+# Fit full model on entire dataset
+
+fit_arx_red <-lm(fml_arx_aic,data=energy_df)
+
+summary(fit_arx_red)
+vif(fit_arx_red)
+
+#--------------------------------
+# Residual Extension: ARMA Models
+#--------------------------------
+# Because ARX residuals showed remaining autocorrelation,
+# ARMA error structures were explored.
+
+energy_df_arma <- energy_df %>%
+  dplyr::select(-starts_with("lag"))  #removing lag terms
+
+# One-step-ahead ARMAX CV
+
+cv_rmse_armax_1step <- function(order_vec, splits_obj, fold_ids = NULL) {
+  
+  splits_to_use <- splits_obj$splits
+  
+  if (!is.null(fold_ids)) {
+    splits_to_use <- splits_to_use[fold_ids]
+  }
+  
+  map_dbl(splits_to_use, function(s) {
+    
+    train <- analysis(s)
+    test  <- assessment(s)
+    
+    preds <- numeric(nrow(test))
+    history <- train
+    
+    for (i in seq_len(nrow(test))) {
+      
+      xreg_hist <- model.matrix(
+        ~ hour_sin + hour_cos + RH_out + T2 + lights_cat,
+        data = history
+      )[, -1, drop = FALSE]
+      
+      fit <- arima(
+        history$lAppliances,
+        order = order_vec,
+        xreg = xreg_hist
+      )
+      
+      newxreg <- model.matrix(
+        ~ hour_sin + hour_cos + RH_out + T2 + lights_cat,
+        data = test[i, , drop = FALSE]
+      )[, -1, drop = FALSE]
+      
+      preds[i] <- predict(fit, n.ahead = 1, newxreg = newxreg)$pred
+      
+      history <- dplyr::bind_rows(history, test[i, , drop = FALSE])
+    }
+    
+    rmse(test$lAppliances, preds)
+  })
+}
+
+rmse_armax_101_1step <- cv_rmse_armax_1step(
+  order_vec = c(1, 0, 1),
+  splits_obj = cv_splits,
+  fold_ids = 1:3
 )
 
-ntree_tune <- 100 
+rmse_armax_201_1step <- cv_rmse_armax_1step(
+  order_vec = c(2, 0, 1),
+  splits_obj = cv_splits,
+  fold_ids = 1:3
+)
+rmse_armax_102_1step <- cv_rmse_armax_1step(
+  order_vec = c(1, 0, 2),
+  splits_obj = cv_splits,
+  fold_ids = 1:3
+)
+
+# Summarize ARMA CV performance
+arma_results <- tibble(
+  model = c("ARMAX(1,1)", "ARMAX(2,1)", "ARMAX(1,2)"),
+  mean_rmse = c(
+    mean(rmse_armax_101_1step),
+    mean(rmse_armax_201_1step),
+    mean(rmse_armax_102_1step)
+  ),
+  sd_rmse = c(
+    sd(rmse_armax_101_1step),
+    sd(rmse_armax_201_1step),
+    sd(rmse_armax_102_1step)
+  )
+)
+
+arma_results
+
+# Fit ARMA models on full dataset for diagnostics
+xreg_mat <- model.matrix(
+  ~ hour_sin + hour_cos + RH_out + T2 + lights_cat,
+  data = energy_df_arma
+)[,-1]
+
+fit_arma11 <- arima(energy_df_arma$lAppliances,order=c(1,0,1),xreg=xreg_mat)
+fit_arma21 <- arima(energy_df_arma$lAppliances,order=c(2,0,1),xreg=xreg_mat)
+fit_arma12 <- arima(energy_df_arma$lAppliances,order=c(1,0,2),xreg=xreg_mat)
+
+summary(fit_arma11)
+summary(fit_arma21)
+summary(fit_arma12)
+
+# Residual diagnostics
+par(mfrow = c(2, 2))
+acf(residuals(fit_arma11),lag.max=50,main = "Autocorrelation Function for lAppliances",sub='ARMA(1,1)')
+acf(residuals(fit_arma21),lag.max=50,main = "Autocorrelation Function for lAppliances",sub='ARMA(1,2)')
+acf(residuals(fit_arma21),lag.max=50,main = "Autocorrelation Function for lAppliances",sub='ARMA(2,1)')
+Box.test(residuals(fit_arma11),lag=20,type="Ljung-Box")
+Box.test(residuals(fit_arma12),lag=20,type="Ljung-Box")
+Box.test(residuals(fit_arma21),lag=20,type="Ljung-Box")
+
+#--------------------------------
+# TSRF
+#--------------------------------
+# Evaluate nonlinear relationships (suggested in EDA) using a time-series random forest.
+
+grid <- expand.grid(
+  mtry=c(2,3,4),
+  nodesize=c(1,10)
+)
+
+ntree_tune <- 100
 set.seed(123)
 
-grid$cv_rmse <- pmap_dbl(grid, function(mtry, nodesize) {
-  mean(map_dbl(cv_splits$splits, function(s) {
+grid$cv_rmse <- pmap_dbl(grid,function(mtry,nodesize){
+  
+  mean(map_dbl(cv_splits$splits,function(s){
+    
     train <- analysis(s)
     test  <- assessment(s)
     
     mod <- randomForest(
-      fml, data = train,
-      ntree = ntree_tune,
-      mtry = mtry,
-      nodesize = nodesize
+      fml_arx_aic,
+      data=train,
+      ntree=ntree_tune,
+      mtry=mtry,
+      nodesize=nodesize
     )
     
-    pred <- predict(mod, newdata = test)
-    rmse(test$lAppliances, pred)
+    pred <- predict(mod,newdata=test)
+    
+    rmse(test$lAppliances,pred)
+    
   }))
+  
 })
 
-grid[order(grid$cv_rmse), ]
-best <- grid[which.min(grid$cv_rmse), ]
-best
+grid[order(grid$cv_rmse),]
 
-#CV on TSRF model
-rmse_arx_rf <- map_dbl(cv_splits$splits, function(s) {
+# Final RF model
+
+rmse_arx_rf <- map_dbl(cv_splits$splits,function(s){
+  
   train <- analysis(s)
   test  <- assessment(s)
   
-  mod <- randomForest(fml_arx_aic, data = train, ntree=500, mtry=3, nodesize=10)
-  pred <- predict(mod, newdata = test)
-  rmse(test$lAppliances, pred)
+  mod <- randomForest(
+    fml_arx_aic,
+    data=train,
+    ntree=500,
+    mtry=3,
+    nodesize=10
+  )
+  
+  pred <- predict(mod,newdata=test)
+  
+  rmse(test$lAppliances,pred)
+  
 })
 
 mean(rmse_arx_rf); sd(rmse_arx_rf)
 
-rf_model<-randomForest(fml_arx_aic, data = energy_df, ntree=500, mtry=3, nodesize=10)
-summary(rf_model)
+# Fit on full dataset for diagnostics
+fit_rf <-randomForest(
+  fml_arx_aic,
+  data=energy_df,
+  ntree=500,
+  mtry=3,
+  nodesize=10
+)
 
-#Calc Adjusted R^2 for RF
-unadjusted_r2 <- rf_model$rsq[length(rf_model$rsq)]
-n<- nrow(energy_df)
-k<- 6 #six predictors
-adjusted_r2 <- 1 - (1 - unadjusted_r2) * (n - 1) / (n - k - 1)
-adjusted_r2
+summary(model_rf)
 
+#--------------------------------
+# Naive Benchmark
+#--------------------------------
+# ̂y_t = y_(t−1)
 
-#Diagnostics for Time series Linear Regression Final candidates
-mod_arx <- model_arx_aic
+rmse_naive <- map_dbl(cv_splits$splits,function(s){
+  
+  train <- analysis(s)
+  test  <- assessment(s)
+  
+  full_y <- c(tail(train$lAppliances,1),test$lAppliances)
+  pred <- full_y[-length(full_y)]
+  
+  rmse(test$lAppliances,pred)
+  
+})
 
-summary(mod_arx)
-acf(residuals(mod_arx), lag.max = 50, main = "ACF of residuals vs Lag (ARX)")
-Box.test(residuals(mod_arx), lag = 20, type = "Ljung-Box")
+mean_naive_rmse <- mean(rmse_naive)
+sd_naive_rmse   <- sd(rmse_naive)
 
-aug <- broom::augment(mod_arx)
+fit_naive=lm(lAppliances=lag1,data = )
 
-ggplot(aug, aes(.fitted, .resid)) +
-  geom_point(alpha = 0.25, color = "#C4C3FA") +
-  geom_smooth(method = "loess", se = FALSE, color = "#0D0533") +
-  geom_hline(yintercept = 0, linetype = 2) +
-  labs(title = "Residuals vs Fitted (ARX)", x = "Fitted values", y = "Residuals") +
-  theme_minimal()
+#--------------------------------
+# Model Comparison
+#--------------------------------
 
-
-#Compare models
 results <- tibble(
-  model = c("AR(1)", "ARX saturated", "ARX AIC-selected", "ARX Random Forest"),
-  mean_rmse = c(mean(rmse_ar1), mean(rmse_arx_sat), mean(rmse_arx_aic), mean(rmse_arx_rf)),
-  sd_rmse   = c(sd(rmse_ar1),   sd(rmse_arx_sat),   sd(rmse_arx_aic), sd(rmse_arx_rf))
+  model=c("Naive","AR(1)","ARX Saturated","ARX AIC","TSRF"),
+  mean_rmse=c(
+    mean_naive_rmse,
+    mean(rmse_ar1),
+    mean(rmse_arx_sat),
+    mean(rmse_arx_aic),
+    mean(rmse_arx_rf)
+  ),
+  sd_rmse=c(
+    sd_naive_rmse,
+    sd(rmse_ar1),
+    sd(rmse_arx_sat),
+    sd(rmse_arx_aic),
+    sd(rmse_arx_rf)
+  )
 )
 
 results
 
-
-
-
-
-
-
-
+#Aggregating ACF plots for comparability
+par(mfrow = c(2, 2))
+acf(residuals())
+acf(residuals(fit_arma11),lag.max=50,main = "ACF for lAppliances",sub='ARMA(1,1)')
+acf(residuals(fit_arma21),lag.max=50,main = "ACF for lAppliances",sub='ARMA(1,2)')
+acf(residuals(fit_arma21),lag.max=50,main = "ACF for lAppliances",sub='ARMA(2,1)')
 
 
