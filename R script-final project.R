@@ -2,6 +2,24 @@
 # REQUIRED LIBRARIES
 #--------------------------------
 
+# if not specific lib not installed , uncomment the required lib before running to install
+
+#install.packages('ggplot2')
+#install.packages('patchwork')
+#install.packages('ggubr')
+#install.packages('dplyr')
+#install.packages('lubridate')
+#install.packages('caret')
+#install.packages('car')
+#install.packages('rsample')
+#install.packages('purrr')
+#install.packages('tidyr)
+#install.packages('tseries')
+#install.packages('tibble')
+#install.packages('forecast')
+#install.packages('randomForest')
+#install.packages('Metrics')
+
 library(ggplot2)
 library(patchwork)
 library(ggpubr)
@@ -22,6 +40,9 @@ library(Metrics)
 #--------------------------------
 # DATA INGESTION + INSPECTION
 #--------------------------------
+
+getwd()
+setwd('C:\\Users\\smjut\\OneDrive\\Documents\\UCI\\DATA210P\\final_project')
 
 energy_df_w_time<- read.csv('energydata_complete.csv')
 
@@ -53,7 +74,7 @@ energy_df_w_time <- energy_df_w_time %>%
     day_sin = sin(2 * pi * day_num / 7),
     day_cos = cos(2 * pi * day_num / 7),
     
-    # keep categorical versions for inference
+    # keep categorical versions for possible inference
     day_name = factor(wday(dt, label = TRUE, abbr = FALSE)),
     
     # Weekend indicator
@@ -340,30 +361,30 @@ plot(hc, main = "Sensor Correlation Clusters",
      xlab = "Distance Metric: 1 - |Correlation|")
 
 #--------------------------------
-# PCA to explore potential dim reduction
+# PCA to explore potential dim reduction #NOTE : NOT INCLUDED IN FINAL REPORT
 #--------------------------------
 
-pca <- prcomp(sensor_vars, center = TRUE, scale. = TRUE)
-
-summary(pca)
-
-# Scree plot
-explained_var <- pca$sdev^2 / sum(pca$sdev^2)
-
-qplot(y = explained_var, x = seq_along(explained_var),
-      geom = "line") +
-  labs(title = "Scree Plot (PCA on Sensor data) ",
-       x = "Principal Component",
-       y = "Proportion of Variance Explained") +
-  theme_minimal()
-
-# PC1 vs PC2
-pc_df <- as.data.frame(pca$x)
-
-ggplot(pc_df, aes(PC1, PC2)) +
-  geom_point(alpha = 0.3) +
-  labs(title = "PCA Projection of Sensor Variables") +
-  theme_minimal()
+# pca <- prcomp(sensor_vars, center = TRUE, scale. = TRUE)
+# 
+# summary(pca)
+# 
+# # Scree plot
+# explained_var <- pca$sdev^2 / sum(pca$sdev^2)
+# 
+# qplot(y = explained_var, x = seq_along(explained_var),
+#       geom = "line") +
+#   labs(title = "Scree Plot (PCA on Sensor data) ",
+#        x = "Principal Component",
+#        y = "Proportion of Variance Explained") +
+#   theme_minimal()
+# 
+# # PC1 vs PC2
+# pc_df <- as.data.frame(pca$x)
+# 
+# ggplot(pc_df, aes(PC1, PC2)) +
+#   geom_point(alpha = 0.3) +
+#   labs(title = "PCA Projection of Sensor Variables") +
+#   theme_minimal()
 
 #--------------------------------
 # Correlation w/ categorical vars
@@ -540,8 +561,7 @@ energy_df <- energy_df %>% arrange(dt)
 
 adf.test(energy_df$lAppliances)
 
-# The ADF test strongly rejected the null hypothesis of a unit root,
-# indicating the series is stationary. Differencing is not required
+# The ADF test strongly rejected the null hypothesis--> series is stationary -->Differencing is not required
 
 #--------------------------------
 # Feature Engineering: Lagged Variables
@@ -558,7 +578,7 @@ energy_df <- energy_df %>% drop_na(starts_with("lag"))
 #--------------------------------
 # Rolling-Origin Cross Validation
 #--------------------------------
-# Time-series models cannot use random CV due to temporal ordering.
+# Time-series models cannot use random CV due to temporal ordering (would cause data leakage)
 # Rolling-origin CV preserves structure.
 
 set.seed(123)
@@ -566,23 +586,25 @@ set.seed(123)
 n <- nrow(energy_df)
 folds <- 11
 
-assess  <- floor(n/(folds+1))
-initial <- n - folds*assess
-skip    <- assess
+assess  <- floor(n/(folds+1)) #size of each window
+initial <- n - folds*assess   #initial window size
+skip    <- assess  #how much to move the window forward
 
 cv_splits <- rolling_origin(
   energy_df,
   initial = initial,
   assess  = assess,
   skip    = skip,
-  cumulative = TRUE
+  cumulative = TRUE #true so that training set grows w/ wach fold
 )
 
-length(cv_splits$splits)
+length(cv_splits$splits) #verifying number of folds 
 
 #--------------------------------
 # RMSE function
 #--------------------------------
+# RMSE will serve as key comparsion tool for predictive accuracy
+
 rmse <- function(y, yhat){
   sqrt(mean((y-yhat)^2, na.rm=TRUE))
 }
@@ -594,6 +616,7 @@ rmse <- function(y, yhat){
 
 cv_rmse_ar_p <- function(p, splits){
   
+  # dynamically add p lag terms to test for all AR(p) models 
   lag_terms <- paste0("lag",1:p,collapse=" + ")
   fml <- as.formula(paste("lAppliances ~",lag_terms))
   
@@ -664,8 +687,8 @@ mean(rmse_ar1); sd(rmse_ar1)
 
 fit_ar1 <- lm(fml_ar1,data=energy_df)
 
-acf(residuals(mod_ar1),lag.max=50)
-Box.test(residuals(mod_ar1),lag=20,type="Ljung-Box")
+acf(residuals(fit_ar1),lag.max=50)
+Box.test(residuals(fit_ar1),lag=20,type="Ljung-Box")
 
 #--------------------------------
 # Time Series Regression (TSRF)
@@ -693,13 +716,13 @@ mean(rmse_arx_sat); sd(rmse_arx_sat)
 fit_arx_sat <- lm(fml_arx_sat,data=energy_df)
 
 summary(fit_arx_sat)
-car::vif(fit_arx_sat)
+vif(fit_arx_sat)
 
 #--------------------------------
 # AIC Model Selection
 #--------------------------------
 
-model_arx_aic <- step(model_arx_sat,direction="both",trace=0)
+model_arx_aic <- step(fit_arx_sat,direction="both",trace=0)
 
 fml_arx_aic <- formula(model_arx_aic)
 
@@ -725,10 +748,9 @@ summary(fit_arx_red)
 vif(fit_arx_red)
 
 #--------------------------------
-# Residual Extension: ARMA Models
+# ARMA Models
 #--------------------------------
-# Because ARX residuals showed remaining autocorrelation,
-# ARMA error structures were explored.
+# Because ARX residuals showed remaining autocorrelation, ARMA error structures were explored.
 
 energy_df_arma <- energy_df %>%
   dplyr::select(-starts_with("lag"))  #removing lag terms
@@ -739,6 +761,7 @@ cv_rmse_armax_1step <- function(order_vec, splits_obj, fold_ids = NULL) {
   
   splits_to_use <- splits_obj$splits
   
+  #optionally restrict to specific folds -- implemented because 10-fold training takes hours 
   if (!is.null(fold_ids)) {
     splits_to_use <- splits_to_use[fold_ids]
   }
@@ -751,12 +774,14 @@ cv_rmse_armax_1step <- function(order_vec, splits_obj, fold_ids = NULL) {
     preds <- numeric(nrow(test))
     history <- train
     
+    #walk through the test set one observation at a time 
     for (i in seq_len(nrow(test))) {
       
-      xreg_hist <- model.matrix(
+      #predictors for training 
+      xreg_hist <- model.matrix( #arma requires numeric matrix
         ~ hour_sin + hour_cos + RH_out + T2 + lights_cat,
         data = history
-      )[, -1, drop = FALSE]
+      )[, -1, drop = FALSE] #remove intercept column
       
       fit <- arima(
         history$lAppliances,
@@ -764,13 +789,16 @@ cv_rmse_armax_1step <- function(order_vec, splits_obj, fold_ids = NULL) {
         xreg = xreg_hist
       )
       
+      #predictors for next tsep
       newxreg <- model.matrix(
         ~ hour_sin + hour_cos + RH_out + T2 + lights_cat,
         data = test[i, , drop = FALSE]
       )[, -1, drop = FALSE]
       
+      #one-step forecast
       preds[i] <- predict(fit, n.ahead = 1, newxreg = newxreg)$pred
       
+      #update history
       history <- dplyr::bind_rows(history, test[i, , drop = FALSE])
     }
     
@@ -778,21 +806,22 @@ cv_rmse_armax_1step <- function(order_vec, splits_obj, fold_ids = NULL) {
   })
 }
 
+###NOTE: Running the following will take a couple hours
 rmse_armax_101_1step <- cv_rmse_armax_1step(
   order_vec = c(1, 0, 1),
   splits_obj = cv_splits,
-  fold_ids = 1:3
+  fold_ids = 1:10
 )
 
 rmse_armax_201_1step <- cv_rmse_armax_1step(
   order_vec = c(2, 0, 1),
   splits_obj = cv_splits,
-  fold_ids = 1:3
+  fold_ids = 1:10
 )
 rmse_armax_102_1step <- cv_rmse_armax_1step(
   order_vec = c(1, 0, 2),
   splits_obj = cv_splits,
-  fold_ids = 1:3
+  fold_ids = 1:10
 )
 
 # Summarize ARMA CV performance
@@ -838,7 +867,9 @@ Box.test(residuals(fit_arma21),lag=20,type="Ljung-Box")
 #--------------------------------
 # TSRF
 #--------------------------------
-# Evaluate nonlinear relationships (suggested in EDA) using a time-series random forest.
+# Evaluate nonlinear relationships (non-lineraity suggested in EDA) using a time-series random forest.
+
+#Find optimal hyperparams
 
 grid <- expand.grid(
   mtry=c(2,3,4),
@@ -905,7 +936,7 @@ fit_rf <-randomForest(
   nodesize=10
 )
 
-summary(model_rf)
+summary(fit_rf)
 
 #--------------------------------
 # Naive Benchmark
@@ -927,7 +958,9 @@ rmse_naive <- map_dbl(cv_splits$splits,function(s){
 mean_naive_rmse <- mean(rmse_naive)
 sd_naive_rmse   <- sd(rmse_naive)
 
-fit_naive=lm(lAppliances=lag1,data = )
+# 'Fit' on entire dataset
+energy_df$naive_pred <- dplyr::lag(energy_df$lAppliances, 1)
+energy_df$naive_resid <- energy_df$lAppliances - energy_df$naive_pred
 
 #--------------------------------
 # Model Comparison
@@ -954,10 +987,44 @@ results <- tibble(
 results
 
 #Aggregating ACF plots for comparability
-par(mfrow = c(2, 2))
-acf(residuals())
-acf(residuals(fit_arma11),lag.max=50,main = "ACF for lAppliances",sub='ARMA(1,1)')
-acf(residuals(fit_arma21),lag.max=50,main = "ACF for lAppliances",sub='ARMA(1,2)')
-acf(residuals(fit_arma21),lag.max=50,main = "ACF for lAppliances",sub='ARMA(2,1)')
+par(mfrow = c(2, 4))
+acf(na.omit(energy_df$naive_resid), main = "ACF of Naive Model Residuals")
+acf(residuals(fit_ar1),lag.max=50,main = "ACF of AR(1) Residuals")
+acf(residuals(fit_arx_sat),lag.max=50,main = "ACF of ARX (saturated) Residuals")
+acf(residuals(fit_arx_red),lag.max=50,main = "ACF of ARX (reduced) Residuals")
+acf(residuals(fit_arma11),lag.max=50,main = "ACF of ARMA(1,1) Residuals")
+acf(residuals(fit_arma21),lag.max=50,main = "ACF of ARMA(1,2) Residuals")
+acf(residuals(fit_arma21),lag.max=50,main = "ACF of ARMA(2,1) Residuals")
+acf(residuals(fit_rf),lag.max=50,main = "ACF of TSRF Residuals")
 
 
+#--------------------------------
+# Final Model Checks/ Eval (ARX-AIC reduced)
+#--------------------------------
+fit_arx_final <-lm(fml_arx_aic,data=energy_df)
+energy_df$fitted_arx <- fitted(fit_arx_final)
+energy_df$residuals_arx <- residuals(fit_arx_final)
+
+#small subset so lines are visible
+ggplot(energy_df[8000:8200, ], aes(x = dt)) +
+  geom_line(aes(y = lAppliances, color = "Actual")) +
+  geom_line(aes(y = fitted_arx, color = "Model Fit")) +
+  labs(
+    title = "ARX (reduced) Model Fit",
+    x = "Date",
+    y = "Log Appliance Energy Consumption (log Wh)",
+    color = ""
+  ) +
+  scale_color_manual(values = c("Actual" = "red", "Model Fit" = "blue")) +
+  theme_minimal()
+
+#residuals vs fitted 
+ggplot(energy_df, aes(x = fitted_arx,y=residuals_arx)) +
+  geom_point(color='#C4C3FA') +
+  geom_smooth(method='loess',se=FALSE, color='#0D0533') +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(
+    title = "Residuals vs Fitted (ARX Reduced Model)",
+    x = "Fitted Values",
+    y = "Residuals",
+  )+ theme_minimal()
