@@ -41,9 +41,6 @@ library(Metrics)
 # DATA INGESTION + INSPECTION
 #--------------------------------
 
-getwd()
-setwd('C:\\Users\\smjut\\OneDrive\\Documents\\UCI\\DATA210P\\final_project')
-
 energy_df_w_time<- read.csv('energydata_complete.csv')
 
 # High level overview
@@ -869,7 +866,7 @@ Box.test(residuals(fit_arma21),lag=20,type="Ljung-Box")
 #--------------------------------
 # Evaluate nonlinear relationships (non-lineraity suggested in EDA) using a time-series random forest.
 
-#Find optimal hyperparams
+# Find optimal hyperparams
 
 grid <- expand.grid(
   mtry=c(2,3,4),
@@ -986,7 +983,7 @@ results <- tibble(
 
 results
 
-#Aggregating ACF plots for comparability
+# aggregating ACF plots for comparability
 par(mfrow = c(2, 4))
 acf(na.omit(energy_df$naive_resid), main = "ACF of Naive Model Residuals")
 acf(residuals(fit_ar1),lag.max=50,main = "ACF of AR(1) Residuals")
@@ -1001,6 +998,7 @@ acf(residuals(fit_rf),lag.max=50,main = "ACF of TSRF Residuals")
 #--------------------------------
 # Final Model Checks/ Eval (ARX-AIC reduced)
 #--------------------------------
+
 fit_arx_final <-lm(fml_arx_aic,data=energy_df)
 energy_df$fitted_arx <- fitted(fit_arx_final)
 energy_df$residuals_arx <- residuals(fit_arx_final)
